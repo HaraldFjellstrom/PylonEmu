@@ -34,6 +34,10 @@ defmodule PylonEmu do
 
   use GenServer
 
+  def start_link(args) do
+    GenServer.start_link(__MODULE__, args)
+  end
+
   @impl true
   def init(can_if) do
     {:ok, can_port} = Ng.Can.start_link
