@@ -3,6 +3,7 @@ defmodule PylonEmu do
 
   defmodule BatState do
     defstruct  [:can_port,                          # pid to CAN process
+                enable: :false,
                 watchdog_counter: 0,
                 temperature_max_dC: 0,              # INT16   in deci °C
                 temperature_min_dC: 0,              # INT16   in deci °C
@@ -36,7 +37,11 @@ defmodule PylonEmu do
   use GenServer
 
   def start_link(args) do
-    GenServer.start_link(__MODULE__, args)
+    GenServer.start_link(__MODULE__, args, name: __MODULE__)
+  end
+
+  def enable do
+    GenServer.cast(__MODULE__, :enable_toggle)
   end
 
   @impl true
@@ -48,6 +53,12 @@ defmodule PylonEmu do
     Process.send_after(self(), :send1000, 1000)
 
     {:ok, %BatState{can_port: can_port}}
+  end
+
+  @impl true
+  def handle_cast(:enable_toggle, state) do
+    state = %{state | enable: !state.enable}
+    {:noreply, state}
   end
 
   @impl true
@@ -200,7 +211,7 @@ defmodule PylonEmu do
   def parse1xx(state, data) do
     <<_can2can_status::unsigned-integer-size(4),
     _operational_status::unsigned-integer-size(2),
-    hvbusconnection_status::unsigned-integer-size(4),
+    hvbusconnection_status::unsigned-integer-size(4), ## ?? HVESS_Operational_Status 0 "Initialization in process" 1 "Initialization Complete, awaiti" 2 "Operational." 3 "Normal Power-Down in Process" 4 "Emergency Power-Down In Process" 5 "Disabled by external command" 6 "Disabled by external error" 7 "Disabled by internal decision o" 8 "Reserved" 9 "Reserved" 10 "Reserved" 11 "Reserved" 12 "Reserved" 13 "Reserved" 14 "Error" 15 "Not Available";
     _cellbalaceing_active::unsigned-integer-size(4),
     _hvil_status::unsigned-integer-size(2),
     _hvbusactiveisotest_status::unsigned-integer-size(4),
@@ -211,7 +222,7 @@ defmodule PylonEmu do
 
     %{state | max_discharge_current_dA: trunc(((0.05*maxdischarge_curr)-1600)*100),
               max_charge_current_dA: trunc(((0.05*maxcharge_curr)-1600)*100),
-              disable_chg_dischg: (if (hvbusdisconnect_forewarning != 0 || hvbusconnection_status == 0), do: <<0xAA, 0xAA, 0xAA, 0xAA>>, else: <<0x00, 0x00,0x00, 0x00>>)
+              disable_chg_dischg: (if (hvbusdisconnect_forewarning != 0 || hvbusconnection_status < 2), do: <<0xAA, 0xAA, 0xAA, 0xAA>>, else: <<0x00, 0x00,0x00, 0x00>>)
     }
   end
 
@@ -261,7 +272,7 @@ defmodule PylonEmu do
     on = <<0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF>>
     off = <<0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00>>
 
-    com_ok = if state.voltage_dV > 1000, do: on, else: off
+    com_ok = if (state.voltage_dV > 1000 && state.enable), do: on, else: off
 
     <<id::size(32)>> = <<0::size(1), 0xF0::integer-size(31)>> ## HV Enable
     frames = [{id, com_ok}]
