@@ -60,7 +60,7 @@ defmodule PylonEmu do
   def handle_info(:send100, state) do
     ## Write every 100 ms here
     state = cond do
-      state.disable_chg_dischg != <<0xAA, 0xAA, 0xAA, 0xAA>> ->
+      state.disable_chg_dischg == <<0xAA, 0xAA, 0xAA, 0xAA>> ->
         %{state | bms_status: 0}
       state.current_dA < 0 ->
         %{state | bms_status: 1}
@@ -261,7 +261,7 @@ defmodule PylonEmu do
     on = <<0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF>>
     off = <<0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00>>
 
-    com_ok = if state.bms_status != 0, do: on, else: off
+    com_ok = if state.voltage_dV > 1000, do: on, else: off
 
     <<id::size(32)>> = <<0::size(1), 0xF0::integer-size(31)>> ## HV Enable
     frames = [{id, com_ok}]
