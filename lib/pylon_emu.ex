@@ -60,13 +60,13 @@ defmodule PylonEmu do
   def handle_info(:send100, state) do
     ## Write every 100 ms here
     state = cond do
-      state.voltage_dV < 5000 ->
+      state.disable_chg_dischg != <<0xAA, 0xAA, 0xAA, 0xAA>> ->
         %{state | bms_status: 0}
-      state.current_dA < 0 and state.voltage_dV < 5000 ->
+      state.current_dA < 0 ->
         %{state | bms_status: 1}
-      state.current_dA > 0 and state.voltage_dV < 5000 ->
+      state.current_dA > 0 ->
         %{state | bms_status: 2}
-      state.current_dA < 0 and state.voltage_dV < 5000 ->
+      state.current_dA == 0 ->
         %{state | bms_status: 3}
     end
 
@@ -200,7 +200,7 @@ defmodule PylonEmu do
   def parse1xx(state, data) do
     <<_can2can_status::unsigned-integer-size(4),
     _operational_status::unsigned-integer-size(2),
-    _hvbusconnection_status::unsigned-integer-size(4),
+    hvbusconnection_status::unsigned-integer-size(4),
     _cellbalaceing_active::unsigned-integer-size(4),
     _hvil_status::unsigned-integer-size(2),
     _hvbusactiveisotest_status::unsigned-integer-size(4),
@@ -211,7 +211,7 @@ defmodule PylonEmu do
 
     %{state | max_discharge_current_dA: trunc(((0.05*maxdischarge_curr)-1600)*100),
               max_charge_current_dA: trunc(((0.05*maxcharge_curr)-1600)*100),
-              disable_chg_dischg: (if hvbusdisconnect_forewarning != 0, do: <<0xAA, 0xAA, 0xAA, 0xAA>>, else: <<0x00, 0x00,0x00, 0x00>>)
+              disable_chg_dischg: (if (hvbusdisconnect_forewarning != 0 or hvbusconnection_status == 0), do: <<0xAA, 0xAA, 0xAA, 0xAA>>, else: <<0x00, 0x00,0x00, 0x00>>)
     }
   end
 
