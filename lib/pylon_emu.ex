@@ -211,7 +211,7 @@ defmodule PylonEmu do
 
     %{state | max_discharge_current_dA: trunc(((0.05*maxdischarge_curr)-1600)*100),
               max_charge_current_dA: trunc(((0.05*maxcharge_curr)-1600)*100),
-              disable_chg_dischg: (if (hvbusdisconnect_forewarning != 0 or hvbusconnection_status == 0), do: <<0xAA, 0xAA, 0xAA, 0xAA>>, else: <<0x00, 0x00,0x00, 0x00>>)
+              disable_chg_dischg: (if (hvbusdisconnect_forewarning != 0 || hvbusconnection_status == 0), do: <<0xAA, 0xAA, 0xAA, 0xAA>>, else: <<0x00, 0x00,0x00, 0x00>>)
     }
   end
 
