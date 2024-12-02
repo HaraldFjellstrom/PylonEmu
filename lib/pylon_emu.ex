@@ -62,11 +62,11 @@ defmodule PylonEmu do
     state = cond do
       state.voltage_dV < 5000 ->
         %{state | bms_status: 0}
-      state.current_dA < 0 ->
+      state.current_dA < 0 and state.voltage_dV < 5000 ->
         %{state | bms_status: 1}
-      state.current_dA > 0 ->
+      state.current_dA > 0 and state.voltage_dV < 5000 ->
         %{state | bms_status: 2}
-      state.current_dA < 0 ->
+      state.current_dA < 0 and state.voltage_dV < 5000 ->
         %{state | bms_status: 3}
     end
 
