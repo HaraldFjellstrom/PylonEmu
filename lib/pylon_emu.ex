@@ -1,6 +1,14 @@
 defmodule PylonEmu do
   require Logger
 
+  ## Att tänka på
+  ##  1. Charge/Discharge är det positivt eller negativt, olika bud på olika delar av dalathegreat's projekt
+  ##  2. Byta CAN-ID till att sluta på 1 ie 4211 istället för 4210
+  ##  3. Endianess och skalning på diverse (Low-High enligt dalathegreat för Sofar inv)
+  ##  4. Kan "operational_status" användas? Osäker på om den är korrekt implementerad i CanGW, om inte behöver disable_chg_dischg hanteras anorlunda. Se rad 82 och 232
+  ##
+  ##  Skapa endast en PylonEmu, toggla HVCont med PylonEmu.enable
+
   defmodule BatState do
     defstruct  [:can_port,                          # pid to CAN process
                 enable: :false,
@@ -16,7 +24,7 @@ defmodule PylonEmu do
                 max_cell_voltage_mV: 0,             # UINT16  in milli volt
                 min_cell_voltage_mV: 0,             # UINT16  in milli volt
                 bms_status: 0,                      # UINT8   0x00 = SLEEP/FAULT 0x01 = Charge 0x02 = Discharge 0x03 = Idle
-                disable_chg_dischg: <<0x00, 0x00,0x00, 0x00>>,      # Set to <<0xAA, 0xAA, 0xAA, 0xAA>> to disable battery, else <<0x00, 0x00, 0x00, 0x00>>
+                disable_chg_dischg: <<0xAA, 0xAA,0xAA, 0xAA>>,      # Set to <<0xAA, 0xAA, 0xAA, 0xAA>> to disable battery, else <<0x00, 0x00, 0x00, 0x00>>
                 msg_4260: <<0x00, 0x02, 0x00, 0x03, 0x27, 0x74, 0xC7, 0xAC>>, # ??
                 msg_4290: <<0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00>>, # ??
                 msg_7310: <<0x00, 0x00, 0x01, 0x01, 0x01, 0x02, 0x00, 0x01>>, # ??
@@ -146,8 +154,7 @@ defmodule PylonEmu do
   end
 
   defp response00(state) do
-    ### All voltages and temperatures should be sent as little endian ??!
-    ### Percentage values should be sent without decimals (/100) and temperature values should add 1k (+1000), dont know why
+    ### All voltages and temperatures should be sent as little endian acording to Dala
     <<id::size(32)>> = <<1::size(1), 0x4210::integer-size(31)>>
     frames = [{id, <<trunc(state.soh_pptt/100)::unsigned-integer-size(8),
                     trunc(state.reported_soc/100)::unsigned-integer-size(8),
@@ -209,9 +216,9 @@ defmodule PylonEmu do
   end
 
   def parse1xx(state, data) do
-    <<_can2can_status::unsigned-integer-size(4),
-    _operational_status::unsigned-integer-size(2),
-    hvbusconnection_status::unsigned-integer-size(4), ## ?? HVESS_Operational_Status 0 "Initialization in process" 1 "Initialization Complete, awaiti" 2 "Operational." 3 "Normal Power-Down in Process" 4 "Emergency Power-Down In Process" 5 "Disabled by external command" 6 "Disabled by external error" 7 "Disabled by internal decision o" 8 "Reserved" 9 "Reserved" 10 "Reserved" 11 "Reserved" 12 "Reserved" 13 "Reserved" 14 "Error" 15 "Not Available";
+    <<_can2can_status::unsigned-integer-size(2),
+    operational_status::unsigned-integer-size(4), ## ?? HVESS_Operational_Status 0 "Initialization in process" 1 "Initialization Complete, awaiti" 2 "Operational." 3 "Normal Power-Down in Process" 4 "Emergency Power-Down In Process" 5 "Disabled by external command" 6 "Disabled by external error" 7 "Disabled by internal decision o" 8 "Reserved" 9 "Reserved" 10 "Reserved" 11 "Reserved" 12 "Reserved" 13 "Reserved" 14 "Error" 15 "Not Available";
+    _hvbusconnection_status::unsigned-integer-size(4),
     _cellbalaceing_active::unsigned-integer-size(4),
     _hvil_status::unsigned-integer-size(2),
     _hvbusactiveisotest_status::unsigned-integer-size(4),
@@ -222,7 +229,7 @@ defmodule PylonEmu do
 
     %{state | max_discharge_current_dA: trunc(((0.05*maxdischarge_curr)-1600)*100),
               max_charge_current_dA: trunc(((0.05*maxcharge_curr)-1600)*100),
-              disable_chg_dischg: (if (hvbusdisconnect_forewarning != 0 || hvbusconnection_status < 2), do: <<0xAA, 0xAA, 0xAA, 0xAA>>, else: <<0x00, 0x00,0x00, 0x00>>)
+              disable_chg_dischg: (if (hvbusdisconnect_forewarning != 0 || operational_status != 2 ), do: <<0xAA, 0xAA, 0xAA, 0xAA>>, else: <<0x00, 0x00,0x00, 0x00>>)
     }
   end
 
